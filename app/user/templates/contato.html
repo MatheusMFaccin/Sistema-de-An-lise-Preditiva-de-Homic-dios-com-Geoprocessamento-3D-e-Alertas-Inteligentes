@@ -1,0 +1,67 @@
+{% load crispy_forms_tags %}
+{% load static %} <!-- Add this line to load static files -->
+
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <title>Cesium 3D Map</title>
+  <!-- Include CesiumJS (CDN or local) -->
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.105/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.105/Build/Cesium/Cesium.js"></script>
+  <style>
+    #cesiumContainer {
+      width: 100%;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="cesiumContainer"></div>
+
+  <script>
+    (async function () {
+      // 1. Carrega o terreno global de forma assíncrona
+      Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkMGY4OWI4YS0xYmU3LTQ3YzctODI5NS1jZjE5NzBkZWE3ZjQiLCJpZCI6MTg4MjYzLCJpYXQiOjE3NDgxNDc1NDR9.Wpho5xiVB2HITQsLdzbNvhOnY7iVWbpQwTfgwzB2rc0';
+      const terrainProvider = await Cesium.createWorldTerrainAsync();
+
+      // 2. Cria o Viewer usando o terrainProvider carregado
+      const viewer = new Cesium.Viewer('cesiumContainer', {
+        terrainProvider,
+        infoBox: false,
+        selectionIndicator: false
+      });
+      const geojsonUrl = "{% static 'user/geojson/tfg_oficial.geojson' %}";
+
+      // 3. Carrega o GeoJSON como um DataSource
+      Cesium.GeoJsonDataSource.load(geojsonUrl, {
+        clampToGround: false,    // fixa o polígono no terreno
+        stroke: Cesium.Color.BLACK.withAlpha(0.3),
+        strokeWidth: 200000,
+        fill: Cesium.Color.BLUE.withAlpha(0.3),
+        markerSize: 10,
+        markerSymbol: '●',
+        markerColor: Cesium.Color.RED.withAlpha(0.3),
+      })
+        .then(dataSource => {
+          // 4. Adiciona ao viewer e ajusta a câmera
+          viewer.dataSources.add(dataSource);
+          viewer.zoomTo(dataSource);
+        })
+        .catch(error => {
+          console.error('Falha ao carregar GeoJSON:', error);
+        });
+
+      // ... seu código de GeoJSON, entidades, etc.
+    })();
+
+    // 2. URL do seu GeoJSON estático
+
+  </script>
+</body>
+
+</html>
