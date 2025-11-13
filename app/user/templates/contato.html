@@ -1,21 +1,155 @@
 {% load crispy_forms_tags %}
-{% load static %} <!-- Add this line to load static files -->
+{% load static %}
 
 <!DOCTYPE html>
 <html lang="pt-br">
 
 <head>
   <title>Cesium 3D Map</title>
-  <!-- Include CesiumJS (CDN or local) -->
+
+
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.105/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+
+
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.105/Build/Cesium/Cesium.js"></script>
   <style>
-    #cesiumContainer {
-      width: 100%;
-      height: 100vh;
+    html,
+    body {
       margin: 0;
       padding: 0;
       overflow: hidden;
+    }
+
+    #cesiumContainer {
+      width: 100%;
+      height: 100vh;
+    }
+
+    /* Seletor de Ano --- MODIFICADO --- */
+    #seletor-ano-container {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+      /* --- ADICIONADO --- */
+      display: flex;
+      align-items: center;
+    }
+
+    #seletor-ano-container label {
+      margin-right: 10px;
+      font-weight: bold;
+      
+    }
+
+    #seletor-ano {
+      font-size: 1em;
+      padding: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+
+    /* Ícone de Informação (Botão) --- MODIFICADO --- */
+    #legenda-trigger {
+
+
+      /* --- ADICIONADO --- */
+      margin-left: 10px;
+      /* Espaçamento */
+      flex-shrink: 0;
+      /* Impede que o ícone achate */
+      position: relative;
+      /* Garante que funcione sem 'absolute' */
+
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      color: #333;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      user-select: none;
+    }
+
+    #legenda-trigger:hover {
+      background: #fff;
+    }
+
+    /* Painel da Legenda (Modal) */
+    #legenda-painel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1001;
+      background: white;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      width: 300px;
+    }
+
+    /* Classe para esconder/mostrar */
+    .hidden {
+      display: none;
+    }
+
+    /* Estilização da lista de cores */
+    #legenda-painel h3 {
+      margin-top: 0;
+      text-align: center;
+      color: #333;
+    }
+
+    #legenda-painel ul {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 15px 0;
+    }
+
+    #legenda-painel li {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 1.1em;
+    }
+
+    .cor-legenda {
+      width: 22px;
+      height: 22px;
+      border: 1px solid #555;
+      margin-right: 12px;
+      display: inline-block;
+      border-radius: 4px;
+    }
+
+    /* Botão de Fechar */
+    #legenda-fechar {
+      width: 100%;
+      padding: 10px;
+      background: #333;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1em;
+      margin-top: 10px;
+    }
+
+    #legenda-fechar:hover {
+      background: #555;
     }
   </style>
 </head>
@@ -24,62 +158,81 @@
   {{ dados_por_ano_json|json_script:"id_dados_por_ano" }}
   <div id="cesiumContainer"></div>
 
+  <div id="seletor-ano-container">
+    <label for="seletor-ano">Ano:</label>
+    <select id="seletor-ano"></select>
+    <div id="legenda-trigger">&#9432;</div>
+  </div>
+
+  <div id="legenda-painel" class="hidden">
+    <h3>Legenda das Cores</h3>
+    <ul>
+      <li><span class="cor-legenda" style="background-color: green;"></span> Abaixo do Previsto</li>
+      <li><span class="cor-legenda" style="background-color: red;"></span> Acima do Previsto</li>
+      <li><span class="cor-legenda" style="background-color: blue;"></span> Dentro do Previsto</li>
+      <li><span class="cor-legenda" style="background-color: gray;"></span> Padrão / Sem dados</li>
+    </ul>
+    <button id="legenda-fechar">Fechar</button>
+  </div>
 
   <script>
-    /**
-     * Remove acentos e converte para minúsculas.
-     * Ex: "São Sepé" -> "sao sepe"
-     */
     function normalizarString(texto) {
-      if (!texto) return ""; // Proteção contra nulos
-
+      if (!texto) return "";
       return texto
         .toLowerCase()
-        .normalize("NFD") // Separa os acentos das letras
-        .replace(/[\u0300-\u036f]/g, ""); // Remove os acentos
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
     }
 
     (async function () {
       // --- 1. Definição de Cores ---
-      // Mapeamento de 'classificacao' para uma cor
       const coresPorClassificacao = {
-        'Abaixo do Previsto': Cesium.Color.GREEN.withAlpha(0.7),
+        'Abaixo do Previsto': Cesium.Color.GREEN.withAlpha(0.9),
         'Acima do Previsto': Cesium.Color.RED.withAlpha(0.7),
         'Dentro do Previsto': Cesium.Color.BLUE.withAlpha(0.7),
-        'PADRAO': Cesium.Color.GRAY.withAlpha(0.2) // ✅ CORRIGIDO: Adicionada cor padrão
+        'PADRAO': Cesium.Color.GRAY.withAlpha(0.2)
       };
 
       // --- 2. Carregar Dados do Django ---
       const dadosElement = document.getElementById('id_dados_por_ano');
       const jsonString = dadosElement.textContent;
       const dadosPorAno2 = JSON.parse(jsonString)
-      const dadosPorAno = JSON.parse(dadosPorAno2); // Renomeei para 'dadosPorAno' para clareza
+      const dadosPorAno = JSON.parse(dadosPorAno2);
 
-      // LOG CORRIGIDO: Verifique os dados *depois* de carregá-los
+      // --- 3. Popuplar o Seletor de Ano ---
+      const seletorAno = document.getElementById('seletor-ano');
+      const anosDisponiveis = Object.keys(dadosPorAno).sort((a, b) => b - a);
 
-      // --- 3. Otimização: Criar um Mapa de Consulta (Lookup Map) ---
-      // Isso transforma sua lista de dados em um objeto de consulta rápida.
-      // Em vez de percorrer a lista para cada município, a consulta é instantânea.
+      anosDisponiveis.forEach(ano => {
+        const option = document.createElement('option');
+        option.value = ano;
+        option.textContent = ano;
+        seletorAno.appendChild(option);
+      });
 
-      const anoSelecionado = '2023'; // 👈 Defina qual ano você quer exibir
-      const mapaClassificacao = new Map(); // Um mapa para consulta rápida
+      // --- 3.5. JAVASCRIPT NOVO: Lógica da Legenda ---
+      const legendaTrigger = document.getElementById('legenda-trigger');
+      const legendaPainel = document.getElementById('legenda-painel');
+      const legendaFechar = document.getElementById('legenda-fechar');
 
-      if (dadosPorAno[anoSelecionado]) {
-        for (const item of dadosPorAno[anoSelecionado]) {
-          const municipioNormalizado = normalizarString(item.municipio);
-          
-          if (municipioNormalizado) {
-            mapaClassificacao.set(municipioNormalizado, item.classificacao);
-          }
-          else {
-            // Opcional: avisa no console que um dado foi ignorado
-            console.warn("Item ignorado (município nulo ou vazio):", municipioNormalizado);
-          }
-        }
-        console.log(`Mapa de consulta para ${anoSelecionado}:`, mapaClassificacao);
+      // Verifica se os elementos existem antes de adicionar os eventos
+      if (legendaTrigger && legendaPainel && legendaFechar) {
+
+        // Ao clicar no ícone 'i'
+        legendaTrigger.addEventListener('click', () => {
+          legendaPainel.classList.remove('hidden'); // Mostra o painel
+        });
+
+        // Ao clicar no botão 'Fechar'
+        legendaFechar.addEventListener('click', () => {
+          legendaPainel.classList.add('hidden'); // Esconde o painel
+        });
+
       } else {
-        console.warn(`Nenhum dado encontrado para o ano ${anoSelecionado}`);
+        console.error("Não foi possível encontrar os elementos da legenda.");
       }
+      // --- FIM JAVASCRIPT NOVO ---
+
 
       // --- 4. Configurar o Cesium Viewer ---
       Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkMGY4OWI4YS0xYmU3LTQ3YzctODI5NS1jZjE5NzBkZWE3ZjQiLCJpZCI6MTg4MjYzLCJpYXQiOjE3NDgxNDc1NDR9.Wpho5xiVB2HITQsLdzbNvhOnY7iVWbpQwTfgwzB2rc0';
@@ -91,45 +244,68 @@
         selectionIndicator: false
       });
 
-      // --- 5. Carregar e Processar o GeoJSON ---
+      // --- 5. Função para Atualizar Cores ---
+      let entidadesDoMapa = [];
+
+      function atualizarMapaPorAno(anoSelecionado) {
+        console.log(`Atualizando cores para o ano: ${anoSelecionado}`);
+        const mapaClassificacao = new Map();
+
+        if (dadosPorAno[anoSelecionado]) {
+          for (const item of dadosPorAno[anoSelecionado]) {
+            const municipioNormalizado = normalizarString(item.municipio);
+            if (municipioNormalizado) {
+              mapaClassificacao.set(municipioNormalizado, item.classificacao);
+            }
+          }
+          console.log(`Mapa de consulta para ${anoSelecionado}:`, mapaClassificacao.size, "municípios");
+        } else {
+          console.warn(`Nenhum dado encontrado para o ano ${anoSelecionado}`);
+        }
+
+        for (let i = 0; i < entidadesDoMapa.length; i++) {
+          const entity = entidadesDoMapa[i];
+          const nmMunProperty = entity.properties['NM_MUN'];
+
+          if (nmMunProperty && entity.polygon) {
+            const nmMun = normalizarString(nmMunProperty.getValue());
+            const classificacao = mapaClassificacao.get(nmMun);
+
+            if (classificacao) {
+              entity.polygon.material = coresPorClassificacao[classificacao] || coresPorClassificacao['PADRAO'];
+            } else {
+              entity.polygon.material = coresPorClassificacao['PADRAO'];
+            }
+            entity.polygon.outline = true;
+            entity.polygon.outlineColor = Cesium.Color.GHOSTWHITE.withAlpha(0.9);
+          }
+        }
+      }
+
+
+      // --- 6. Carregar e Processar o GeoJSON ---
       const geojsonUrl = "{% static 'user/geojson/tfg_oficial.geojson' %}";
 
       Cesium.GeoJsonDataSource.load(geojsonUrl)
         .then(dataSource => {
           viewer.dataSources.add(dataSource);
           viewer.zoomTo(dataSource);
+          entidadesDoMapa = dataSource.entities.values;
 
-          const entities = dataSource.entities.values;
+          // --- 7. Adicionar o Event Listener do Seletor de Ano ---
+          seletorAno.addEventListener('change', (event) => {
+            const anoEscolhido = event.target.value;
+            atualizarMapaPorAno(anoEscolhido);
+          });
 
-          // Loop principal para colorir CADA entidade
-          for (let i = 0; i < entities.length; i++) {
-            const entity = entities[i];
-            const nmMunProperty = entity.properties['NM_MUN'];
-
-            if (nmMunProperty && entity.polygon) {
-              
-              // ✅ LINHA CORRIGIDA: Use a normalização aqui também
-              const nmMun = normalizarString(nmMunProperty.getValue());
-              
-              // ✅ LÓGICA PRINCIPAL:
-              // 1. Consulta o nome do município no nosso Mapa de Classificação
-              const classificacao = mapaClassificacao.get(nmMun); // Ex: 'dentro do previsto' ou undefined
-
-              
-              if (classificacao) {
-                // Encontrou uma classificação, usa a cor correspondente
-                entity.polygon.material = coresPorClassificacao[classificacao] || coresPorClassificacao['PADRAO'];
-              } else {
-                // Não encontrou classificação para este município
-                entity.polygon.material = coresPorClassificacao['PADRAO'];
-                // console.log(`Município "${nmMun}" não encontrado nos dados do ano ${anoSelecionado}.`); // Descomente para debugar
-              }
-
-              // Define a borda (opcional)
-              entity.polygon.outline = true;
-              entity.polygon.outlineColor = Cesium.Color.BLACK.withAlpha(0.6);
-            }
+          // --- 8. Carga Inicial ---
+          const anoInicial = seletorAno.value;
+          if (anoInicial) {
+            atualizarMapaPorAno(anoInicial);
+          } else {
+            console.warn("Nenhum ano disponível para a carga inicial.");
           }
+
         })
         .catch(error => {
           console.error('Falha ao carregar GeoJSON:', error);
