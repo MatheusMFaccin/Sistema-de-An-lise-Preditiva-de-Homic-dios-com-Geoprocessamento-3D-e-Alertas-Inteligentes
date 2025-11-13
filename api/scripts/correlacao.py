@@ -154,7 +154,7 @@ class Correlacao:
             # Y_pred_train é um float, o que é correto
             df_resultado_grupo = pd.DataFrame({
                 'ano_previsao': group['ano'],
-                'previsao_mortes': Y_pred_train
+                'previsao_homicidios': Y_pred_train
             })
 
             # --- F. Fazer a Previsão (FUTURO) ---
@@ -174,18 +174,18 @@ class Correlacao:
             # previsao_futura agora também é um float
             df_linha_futura = pd.DataFrame({
                 'ano_previsao': [ano_max + 1],
-                'previsao_mortes': [previsao_futura]
+                'previsao_homicidios': [previsao_futura]
             })
             df_resultado_grupo = pd.concat([df_resultado_grupo, df_linha_futura], ignore_index=True)
 
             # --- H. Adicionar as colunas de erro (são iguais para todas as linhas) ---
             # Todos os cálculos são feitos com floats, mantendo a precisão
-            df_resultado_grupo['margem_erro (k)'] = k
-            df_resultado_grupo['previsao_min'] = df_resultado_grupo['previsao_mortes'] - k
-            df_resultado_grupo['previsao_max'] = df_resultado_grupo['previsao_mortes'] + k
-            df_resultado_grupo['correlacao_temporal (r)'] = r_temporal
-            df_resultado_grupo['erro_padrao (se)'] = se
-            df_resultado_grupo['fator_penalidade (f(r))'] = f_r
+            df_resultado_grupo['margem_erro_k'] = k
+            df_resultado_grupo['previsao_min'] = df_resultado_grupo['previsao_homicidios'] - k
+            df_resultado_grupo['previsao_max'] = df_resultado_grupo['previsao_homicidios'] + k
+            df_resultado_grupo['correlacao_temporal_r'] = r_temporal
+            df_resultado_grupo['erro_padrao_se'] = se
+            df_resultado_grupo['fator_penalidade_fr'] = f_r
             df_resultado_grupo['n_anos_dados'] = n
             
             # --- I. Filtrar para os anos que você solicitou ---
@@ -196,7 +196,7 @@ class Correlacao:
             # --- J. (NOVO) ARREDONDAR E AJUSTAR SAÍDAS FINAIS ---
             
             # Lista das colunas que você quer como inteiros não-negativos
-            colunas_para_inteiro = ['previsao_mortes', 'previsao_min', 'previsao_max']
+            colunas_para_inteiro = ['previsao_homicidios', 'previsao_min', 'previsao_max']
 
             for col in colunas_para_inteiro:
                 # 1. Arredonda para o inteiro mais próximo (.round())
@@ -207,7 +207,7 @@ class Correlacao:
 
             # Opcional: Se quiser arredondar as colunas estatísticas (k, r, se) 
             # para 4 casas decimais para melhor visualização:
-            col_stats = ['margem_erro (k)', 'correlacao_temporal (r)', 'erro_padrao (se)', 'fator_penalidade (f(r))']
+            col_stats = ['margem_erro_k', 'correlacao_temporal_r', 'erro_padrao_se', 'fator_penalidade_fr']
             df_resultado_filtrado[col_stats] = df_resultado_filtrado[col_stats].round(4)
             
             return df_resultado_filtrado
@@ -255,9 +255,6 @@ class Correlacao:
                 
                 df_previsoes = df_anual_filtrado.groupby('municipio').apply(self.calcular_previsao_para_grupo)
 
-            # --- Etapa 5: Limpar o resultado (AJUSTADO) ---
-            # O .apply() criou um MultiIndex (municipio, index_interno). 
-            # O .reset_index() vai achatar isso.
             df_previsoes = df_previsoes.reset_index()
             
             # Remove o índice antigo do 'apply' se ele existir
@@ -277,3 +274,72 @@ class Correlacao:
             )
             df_anual = df_eventos.groupby(['municipio','ano']).agg(total_vitimas_ano = ('vitimas','sum') ).reset_index()
             return df_anual
+
+        def comparar_previsoes_com_reais(self):
+            
+            print("Iniciando comparação...")
+
+            # --- 1. Carregar os Dados ---
+            try:
+                df_previsoes = pd.read_sql(
+                    "SELECT * FROM previsoes", 
+                    con=engine
+                )
+                df_reais = pd.read_sql(
+                    "SELECT * FROM dados_reais_anuais", 
+                    con=engine
+                )
+            except Exception as e:
+                print(f"Erro ao ler tabelas do banco: {e}")
+                return pd.DataFrame() # Retorna DF vazio em caso de erro
+
+            if df_previsoes.empty:
+                print("A tabela 'previsoes' está vazia. Não há nada para comparar.")
+                return pd.DataFrame()
+            if df_reais.empty:
+                print("A tabela 'dados_reais_anuais' está vazia. Não há nada para comparar.")
+                return pd.DataFrame()
+
+            # --- 2. Unir (Merge) os DataFrames ---
+            
+            # Renomeia a coluna de ano da previsão para ser igual à coluna de ano real
+            df_previsoes_clean = df_previsoes.rename(columns={'ano_previsao': 'ano'})
+
+            # Une as tabelas usando 'municipio' e 'ano' como chaves
+            df_comparativo = pd.merge(
+                df_previsoes_clean,
+                df_reais,
+                on=['municipio', 'ano'],
+                how='inner' # 'inner' garante que só teremos linhas com dados reais E previsão
+            )
+
+            if df_comparativo.empty:
+                print("Nenhum dado real e de previsão correspondente (municipio/ano) foi encontrado.")
+                return df_comparativo
+
+            # --- 3. Criar a Classificação ---
+            
+            # Lista de condições
+            conditions = [
+                # 1. O valor real foi MAIOR que a previsão máxima?
+                (df_comparativo['total_vitimas_ano'] > df_comparativo['previsao_max']),
+                
+                # 2. O valor real foi MENOR que a previsão mínima?
+                (df_comparativo['total_vitimas_ano'] < df_comparativo['previsao_min'])
+            ]
+
+            # Lista de resultados (na mesma ordem das condições)
+            choices = [
+                'Acima do Previsto',
+                'Abaixo do Previsto'
+            ]
+
+            # Aplica a lógica
+            df_comparativo['classificacao'] = np.select(
+                conditions, 
+                choices, 
+                default='Dentro do Previsto' # Se nenhuma condição for atendida
+            )
+            
+            print(f"Comparação concluída. {len(df_comparativo)} linhas classificadas.")
+            return df_comparativo

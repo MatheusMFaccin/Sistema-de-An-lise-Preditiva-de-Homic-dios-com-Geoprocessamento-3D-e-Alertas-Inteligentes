@@ -21,46 +21,120 @@
 </head>
 
 <body>
+  {{ dados_por_ano_json|json_script:"id_dados_por_ano" }}
   <div id="cesiumContainer"></div>
 
+
   <script>
+    /**
+     * Remove acentos e converte para minúsculas.
+     * Ex: "São Sepé" -> "sao sepe"
+     */
+    function normalizarString(texto) {
+      if (!texto) return ""; // Proteção contra nulos
+
+      return texto
+        .toLowerCase()
+        .normalize("NFD") // Separa os acentos das letras
+        .replace(/[\u0300-\u036f]/g, ""); // Remove os acentos
+    }
+
     (async function () {
-      // 1. Carrega o terreno global de forma assíncrona
+      // --- 1. Definição de Cores ---
+      // Mapeamento de 'classificacao' para uma cor
+      const coresPorClassificacao = {
+        'Abaixo do Previsto': Cesium.Color.GREEN.withAlpha(0.7),
+        'Acima do Previsto': Cesium.Color.RED.withAlpha(0.7),
+        'Dentro do Previsto': Cesium.Color.BLUE.withAlpha(0.7),
+        'PADRAO': Cesium.Color.GRAY.withAlpha(0.2) // ✅ CORRIGIDO: Adicionada cor padrão
+      };
+
+      // --- 2. Carregar Dados do Django ---
+      const dadosElement = document.getElementById('id_dados_por_ano');
+      const jsonString = dadosElement.textContent;
+      const dadosPorAno2 = JSON.parse(jsonString)
+      const dadosPorAno = JSON.parse(dadosPorAno2); // Renomeei para 'dadosPorAno' para clareza
+
+      // LOG CORRIGIDO: Verifique os dados *depois* de carregá-los
+
+      // --- 3. Otimização: Criar um Mapa de Consulta (Lookup Map) ---
+      // Isso transforma sua lista de dados em um objeto de consulta rápida.
+      // Em vez de percorrer a lista para cada município, a consulta é instantânea.
+
+      const anoSelecionado = '2023'; // 👈 Defina qual ano você quer exibir
+      const mapaClassificacao = new Map(); // Um mapa para consulta rápida
+
+      if (dadosPorAno[anoSelecionado]) {
+        for (const item of dadosPorAno[anoSelecionado]) {
+          const municipioNormalizado = normalizarString(item.municipio);
+          
+          if (municipioNormalizado) {
+            mapaClassificacao.set(municipioNormalizado, item.classificacao);
+          }
+          else {
+            // Opcional: avisa no console que um dado foi ignorado
+            console.warn("Item ignorado (município nulo ou vazio):", municipioNormalizado);
+          }
+        }
+        console.log(`Mapa de consulta para ${anoSelecionado}:`, mapaClassificacao);
+      } else {
+        console.warn(`Nenhum dado encontrado para o ano ${anoSelecionado}`);
+      }
+
+      // --- 4. Configurar o Cesium Viewer ---
       Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkMGY4OWI4YS0xYmU3LTQ3YzctODI5NS1jZjE5NzBkZWE3ZjQiLCJpZCI6MTg4MjYzLCJpYXQiOjE3NDgxNDc1NDR9.Wpho5xiVB2HITQsLdzbNvhOnY7iVWbpQwTfgwzB2rc0';
       const terrainProvider = await Cesium.createWorldTerrainAsync();
 
-      // 2. Cria o Viewer usando o terrainProvider carregado
       const viewer = new Cesium.Viewer('cesiumContainer', {
         terrainProvider,
         infoBox: false,
         selectionIndicator: false
       });
+
+      // --- 5. Carregar e Processar o GeoJSON ---
       const geojsonUrl = "{% static 'user/geojson/tfg_oficial.geojson' %}";
 
-      // 3. Carrega o GeoJSON como um DataSource
-      Cesium.GeoJsonDataSource.load(geojsonUrl, {
-        clampToGround: false,    // fixa o polígono no terreno
-        stroke: Cesium.Color.BLACK.withAlpha(0.3),
-        strokeWidth: 200000,
-        fill: Cesium.Color.BLUE.withAlpha(0.3),
-        markerSize: 10,
-        markerSymbol: '●',
-        markerColor: Cesium.Color.RED.withAlpha(0.3),
-      })
+      Cesium.GeoJsonDataSource.load(geojsonUrl)
         .then(dataSource => {
-          // 4. Adiciona ao viewer e ajusta a câmera
           viewer.dataSources.add(dataSource);
           viewer.zoomTo(dataSource);
+
+          const entities = dataSource.entities.values;
+
+          // Loop principal para colorir CADA entidade
+          for (let i = 0; i < entities.length; i++) {
+            const entity = entities[i];
+            const nmMunProperty = entity.properties['NM_MUN'];
+
+            if (nmMunProperty && entity.polygon) {
+              
+              // ✅ LINHA CORRIGIDA: Use a normalização aqui também
+              const nmMun = normalizarString(nmMunProperty.getValue());
+              
+              // ✅ LÓGICA PRINCIPAL:
+              // 1. Consulta o nome do município no nosso Mapa de Classificação
+              const classificacao = mapaClassificacao.get(nmMun); // Ex: 'dentro do previsto' ou undefined
+
+              
+              if (classificacao) {
+                // Encontrou uma classificação, usa a cor correspondente
+                entity.polygon.material = coresPorClassificacao[classificacao] || coresPorClassificacao['PADRAO'];
+              } else {
+                // Não encontrou classificação para este município
+                entity.polygon.material = coresPorClassificacao['PADRAO'];
+                // console.log(`Município "${nmMun}" não encontrado nos dados do ano ${anoSelecionado}.`); // Descomente para debugar
+              }
+
+              // Define a borda (opcional)
+              entity.polygon.outline = true;
+              entity.polygon.outlineColor = Cesium.Color.BLACK.withAlpha(0.6);
+            }
+          }
         })
         .catch(error => {
           console.error('Falha ao carregar GeoJSON:', error);
         });
-
-      // ... seu código de GeoJSON, entidades, etc.
     })();
-
-    // 2. URL do seu GeoJSON estático
-
   </script>
 </body>
 

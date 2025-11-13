@@ -7,7 +7,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 from db.session import Base  # onde você definiu o Base
-from models import evento, datasus    # importe todos os modelos aqui
+from models import evento, datasus,previsao, dados_reais, ComparativoPrevisao    # importe todos os modelos aqui
 import os
 from dotenv import load_dotenv
 

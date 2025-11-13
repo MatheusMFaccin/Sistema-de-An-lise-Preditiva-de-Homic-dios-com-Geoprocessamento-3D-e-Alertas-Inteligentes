@@ -11,6 +11,8 @@ services:
       - .env
     depends_on:
       - db
+    networks:
+      - default
 
   db:
     image: postgres:15
@@ -24,6 +26,17 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+      - gataway
 
 volumes:
   postgres_data:
+
+networks:
+  default:
+    driver: bridge
+  
+  gataway:
+    external: true
+    name: gataway

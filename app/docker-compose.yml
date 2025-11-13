@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  web: # Ou 'app', 'django', etc.
+    build: .
+    env_file:
+      - .env
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+             gunicorn app.wsgi:application --bind 0.0.0.0:8001"
+    ports:
+      - "8001:8001"
+    networks:
+      - default
+      - gataway # Coloca o Django na mesma rede do DB
+    volumes:
+      - .:/app
+    
+networks:
+  default:
+    driver: bridge
+  gataway:
+    external: true
+    name: gataway
