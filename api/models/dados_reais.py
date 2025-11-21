@@ -1,16 +1,17 @@
-from sqlalchemy import Column, Integer, String, UniqueConstraint
+from sqlalchemy import Column, Integer, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
 from db.session import Base  
 
-class DadosReaisAnuais(Base):
-    
+class EventosTotaisAnuais(Base):
     __tablename__ = "dados_reais_anuais"
 
     id = Column(Integer, primary_key=True, index=True)
-    
-    municipio = Column(String, nullable=False, index=True)
+    municipio_id = Column(Integer, ForeignKey("municipios.id"), nullable=False, index=True)
     ano = Column(Integer, nullable=False, index=True)
     total_vitimas_ano = Column(Integer, nullable=False)
 
+    municipio = relationship("Municipio", back_populates="dados_reais")
+
     __table_args__ = (
-        UniqueConstraint('municipio', 'ano', name='_municipio_ano_reais_uc'),
+        UniqueConstraint('municipio_id', 'ano', name='_municipio_id_ano_reais_uc'),
     )

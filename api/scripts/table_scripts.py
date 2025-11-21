@@ -10,10 +10,10 @@ class Limpa_arquivo:
         df = pd.read_csv(tabela_homicidios, sep=";")
 
         # Remove colunas 100% vazias
-        self.df = df.dropna(axis=1, how="all")
+        df = df.dropna(axis=1, how="all")
 
         # Salva de volta no TXT
-        return self.df.to_csv("limpo.txt", sep=";", index=False)
+        return df
 
     def load_datasus(tabela_datasus):
         df = pd.read_csv(tabela_datasus, sep=";", header=0)

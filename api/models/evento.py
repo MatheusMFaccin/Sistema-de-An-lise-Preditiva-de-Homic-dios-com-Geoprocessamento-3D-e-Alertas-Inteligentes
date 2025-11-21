@@ -1,16 +1,25 @@
-from sqlalchemy import Column, Integer, String, Float, Date, PrimaryKeyConstraint,UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
 from db.session import Base
 
 class Evento(Base):
     __tablename__ = "eventos"
 
-    uf = Column(String, nullable=False)
-    municipio = Column(String, nullable=False)
-    mes = Column(String, nullable=False)
-    ano = Column(Integer, nullable=False)
-    vitimas = Column(Integer, nullable = False, default=0)
-    id = Column(Integer, primary_key=True, index=True)    
+    id = Column(Integer, primary_key=True, index=True)
     
+    # Substituímos as strings por uma FK
+    municipio_id = Column(Integer, ForeignKey("municipios.id"), nullable=False, index=True)
+    
+    # Otimização: Se "mes" for numérico (1-12), use Integer (mais rápido). 
+    # Se for nome ("Janeiro"), considere mudar para Int ou manter String. Vou assumir Int ou String curta.
+    mes = Column(Integer, nullable=False) 
+    ano = Column(Integer, nullable=False, index=True)
+    vitimas = Column(Integer, nullable=False, default=0)
+
+    # Relacionamento SQLAlchemy
+    municipio = relationship("Municipio", back_populates="eventos")
+
     __table_args__ = (
-        UniqueConstraint('uf', 'municipio', 'ano', 'mes', name='_uf_municipio_ano_mes_uc'),
+        
+        UniqueConstraint('municipio_id', 'ano', 'mes', name='_municipio_id_ano_mes_uc'),
     )

@@ -1,38 +1,36 @@
-from sqlalchemy import Column, Integer, String, Float, UniqueConstraint
-from db.session import Base  # Importe sua Base declarativa
+# models/ComparativoPrevisao.py
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
+from db.session import Base  
 
 class ComparativoPrevisao(Base):
-    
     __tablename__ = "comparativo_previsoes"
 
     id = Column(Integer, primary_key=True, index=True)
     
-    id_x = Column (Integer, nullable= False, index=True)
-    id_y = Column (Integer, nullable= False, index=True)
-    # Chaves da união
-    municipio = Column(String, nullable=False, index=True)
+    # FKs para as origens (Rastreabilidade)
+    previsao_id = Column(Integer, ForeignKey("previsoes.id"), nullable=False)
+    dado_real_id = Column(Integer, ForeignKey("dados_reais_anuais.id"), nullable=True) # Pode ser Null se o ano ainda não fechou
+    
+    # Redundância controlada para performance de leitura (Analytics)
+    municipio_id = Column(Integer, ForeignKey("municipios.id"), nullable=False, index=True)
     ano = Column(Integer, nullable=False, index=True)
     
-    # 1. O dado Real
-    total_vitimas_ano = Column(Integer, nullable=False)
-    
-    # 2. O dado Previsto
-    # (Estou usando 'previsao_homicidios' com base na nossa última conversa)
+    total_vitimas_ano = Column(Integer, nullable=True) # Nullable, pois o ano pode não ter acabado
     previsao_homicidios = Column(Float, nullable=False)
     previsao_min = Column(Float, nullable=False)
     previsao_max = Column(Float, nullable=False)
     
-    # 3. O Resultado (A Classificação)
-    classificacao = Column(String, nullable=False, index=True)
-    
-    # 4. Metadados (Como a previsão foi calculada)
-    margem_erro_k = Column(Float, nullable=True)
-    correlacao_temporal_r = Column(Float, nullable=True)
-    erro_padrao_se = Column(Float, nullable=True)
-    fator_penalidade_fr = Column(Float, nullable=True)
-    n_anos_dados = Column(Integer, nullable=False)
+    classificacao = Column(String, nullable=False, index=True) # Ex: "Dentro da margem", "Erro Crítico"
 
-    # Garante que só podemos ter uma linha de comparação por município/ano
+    # Métricas copiadas (snapshot)
+    margem_erro_k = Column(Float, nullable=True)
+    
+    # Relacionamentos para facilitar acesso aos pais se necessário
+    previsao_origem = relationship("Previsao")
+    dado_real_origem = relationship("EventosTotaisAnuais")
+    municipio = relationship("Municipio")
+
     __table_args__ = (
-        UniqueConstraint('municipio', 'ano', name='_municipio_ano_comparativo_uc'),
+        UniqueConstraint('municipio_id', 'ano', name='_municipio_id_ano_comparativo_uc'),
     )
