@@ -287,34 +287,48 @@ class Conn:
 
 
 if __name__ == "__main__":
-    evento_caminho = "eventos2024.csv"
-    datasus_caminho = 'datasus2024.txt'
-    ano_datasus = "2024"
+    # 1. Defina as listas corretamente (sem o [i])
+    eventos_arquivos = [
+        "eventos2024.csv", "eventos2023.csv", "eventos2022.csv",
+        "eventos2021.csv", "eventos2020.csv", "eventos2019.csv"
+    ]
+    datasus_arquivos = [
+        'datasus2024.txt', 'datasus2023.txt', 'datasus2022.txt',
+        'datasus2021.txt', 'datasus2020.txt', 'datasus2019.txt'
+    ]
+    anos = ["2024", "2023", "2022", "2021", "2020", "2019"]
     
-    conn = Conn()
+    conn = Conn() # Instancie a conexão uma vez fora do loop
+
+    # 2. Loop apenas para inserção de dados
+    for i in range(len(eventos_arquivos)):
+        print(f"--- Processando ano {anos[i]} ---")
+        
+        # Sincroniza municípios e insere dados brutos
+        conn.sync_municipios(SessionLocal, datasus_arquivos[i], eventos_arquivos[i])
+        conn.insert_evento(SessionLocal, eventos_arquivos[i])
+        conn.insert_datasus(SessionLocal, datasus_arquivos[i], anos[i])
+
+    # 3. Cálculos de correlação (FORA do loop de inserção)
+    # Isso evita que o código fique lento e recalcule o que já foi feito
+    print("--- Calculando Correlações e Previsões ---")
     
-    
-    conn.sync_municipios(SessionLocal, datasus_caminho, evento_caminho)
-    
-    conn.insert_evento(SessionLocal, evento_caminho)
-    conn.insert_datasus(SessionLocal, datasus_caminho, ano_datasus)
-    
-    # 3. Prepara e calcula correlações
-    # Note que os métodos de preparo agora buscam dados do banco já com IDs
     datasus_df = Correlacao.prepara_correlacao_datasus()
     eventos_df = Correlacao.prepara_correlacao_eventos()
-    
+
     c = Correlacao()
     correlacao_df = c.calcular_previsao_temporal_por_municipio(datasus_df, eventos_df)
-    
-    # Salvar logs se quiser
+
+    # Salvar logs
     correlacao_df.to_csv("correlacao_debug.csv", sep=";", index=False)
-    
     conn.insert_correlacao(SessionLocal, correlacao_df)
-    
+
+    # Dados reais e comparativos
     df_reais = c.calcula_dados_reais()
     df_reais.to_csv("reais.csv", sep=";", index=False)
     conn.insert_dados_reais(SessionLocal, df_reais)
-    
+
     df_comp = c.comparar_previsoes_com_reais()
     conn.insert_comparativo(SessionLocal, df_comp)
+    
+    print("--- Processo finalizado com sucesso! ---")
