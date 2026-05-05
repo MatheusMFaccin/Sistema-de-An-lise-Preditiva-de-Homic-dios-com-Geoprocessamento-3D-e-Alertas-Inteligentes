@@ -145,9 +145,9 @@ r = \frac{\sum_{i=1}^{n}(x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum_{i=1}^{n}(x_i
 $$
 
 Onde:
-- **x** = total de vítimas de eventos por ano
-- **y** = total de mortes DataSUS por ano
-- **n** = número de anos com dados disponíveis
+- **$x$** = total de vítimas de eventos por ano
+- **$y$** = total de mortes DataSUS por ano
+- **$n$** = número de anos com dados disponíveis
 
 #### Interpretação do r
 
@@ -175,18 +175,18 @@ SE = \sqrt{\frac{\sum_{i=1}^{n}(y_i - \hat{y}_i)^2}{n - 2}}
 $$
 
 Onde:
-- **y_i** = valor real (total de vítimas no ano)
-- **ŷ_i** = valor previsto pelo modelo de regressão linear
-- **n** = número de anos de dados
-- **n - 2** = graus de liberdade (ajuste para regressão linear simples)
+- **$y_i$** = valor real (total de vítimas no ano)
+- **$\hat{y}_i$** = valor previsto pelo modelo de regressão linear
+- **$n$** = número de anos de dados
+- **$n - 2$** = graus de liberdade (ajuste para regressão linear simples)
 
 > O SE só é calculado quando há mais de 2 anos de dados (`n > 2`). Caso contrário, será `NaN`.
 
-#### 7.2.2. Fator de Penalidade (f_r)
+#### 7.2.2. Fator de Penalidade ($f_r$)
 
 O fator de penalidade ajusta a margem de erro com base na **qualidade da correlação** entre as duas fontes de dados. Quanto mais fraca a correlação, maior a margem de erro aplicada:
 
-| Valor de \|r\| | Fator de Penalidade (f_r) |
+| Valor de \|r\| | Fator de Penalidade ($f_r$) |
 |:---:|:---:|
 | ≥ 0.9 | 1.0 |
 | ≥ 0.7 | 1.5 |
@@ -204,10 +204,10 @@ $$
 Isso resulta no **intervalo de previsão**:
 
 $$
-\text{previsão\_min} = \text{previsão} - k
+\text{previsão}_{min} = \text{previsão} - k
 $$
 $$
-\text{previsão\_max} = \text{previsão} + k
+\text{previsão}_{max} = \text{previsão} + k
 $$
 
 #### 7.2.4. Classificação
