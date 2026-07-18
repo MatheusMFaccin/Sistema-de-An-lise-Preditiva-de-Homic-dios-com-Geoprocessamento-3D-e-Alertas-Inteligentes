@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Previsao de Homicidios - RS</title>
+
+    <!-- Cesium -->
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.105/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.105/Build/Cesium/Cesium.js"></script>
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+
+    <!-- Vue 3 + Vue Router -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
+
+    <link href="/static/css/style.css" rel="stylesheet">
+
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+        body { display: flex; flex-direction: column; }
+        #app { width: 100%; flex: 1; display: flex; flex-direction: column; }
+        .mapa-page { width: 100%; flex: 1; display: flex; flex-direction: column; position: relative; }
+        #cesiumContainer { width: 100%; flex: 1; min-height: 0; }
+
+        #seletor-ano-container {
+            position: absolute; top: 20px; left: 20px; z-index: 1000;
+            background: rgba(255,255,255,0.9); padding: 10px 15px;
+            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex; align-items: center;
+        }
+        #seletor-ano-container label { margin-right: 10px; font-weight: bold; }
+        #seletor-ano { font-size: 1em; padding: 5px; border-radius: 5px; border: 1px solid #ccc; }
+
+        #legenda-trigger {
+            margin-left: 10px; flex-shrink: 0; position: relative;
+            background: rgba(255,255,255,0.9); border-radius: 50%;
+            width: 40px; height: 40px; display: flex; align-items: center;
+            justify-content: center; font-size: 24px; font-weight: bold;
+            color: #333; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            user-select: none;
+        }
+        #legenda-trigger:hover { background: #fff; }
+
+        #legenda-painel {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 1001; background: white; padding: 25px; border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            width: 300px;
+        }
+        .hidden { display: none; }
+        #legenda-painel h3 { margin-top: 0; text-align: center; color: #333; }
+        #legenda-painel ul { list-style: none; padding: 0; margin: 0 0 15px 0; }
+        #legenda-painel li { display: flex; align-items: center; margin-bottom: 12px; font-size: 1.1em; }
+        .cor-legenda { width: 22px; height: 22px; border: 1px solid #555; margin-right: 12px; display: inline-block; border-radius: 4px; }
+        #legenda-fechar { width: 100%; padding: 10px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; margin-top: 10px; }
+        #legenda-fechar:hover { background: #555; }
+
+        /* Detalhes */
+        .detalhes-page { height: 100%; overflow-y: auto; }
+        .detalhes-page body { overflow: auto; display: flex; flex-direction: column; min-height: 100vh; }
+        .detalhes-page main { flex: 1; }
+        .sidebar { background: #f8f9fa; min-height: 100vh; }
+        .table th { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <router-view></router-view>
+</div>
+
+<script>
+const { createApp, ref, onMounted, onUnmounted, nextTick, watch } = Vue;
+const { createRouter, createWebHistory } = VueRouter;
+
+// --- Pagina do Mapa ---
+const MapaPage = {
+    template: `
+        <div class="mapa-page">
+            <div id="cesiumContainer"></div>
+            <div id="seletor-ano-container">
+                <label for="seletor-ano">Ano:</label>
+                <select id="seletor-ano" v-model="anoSelecionado" @change="atualizarMapa">
+                    <option v-for="ano in anosDisponiveis" :key="ano" :value="ano">{{ ano }}</option>
+                </select>
+                <div id="legenda-trigger" @click="legendaAberta = !legendaAberta">&#9432;</div>
+            </div>
+            <div id="legenda-painel" :class="{ hidden: !legendaAberta }">
+                <h3>Taxa de Homicidios</h3>
+                <h3>Legenda das Cores</h3>
+                <ul>
+                    <li><span class="cor-legenda" style="background-color: green;"></span> Abaixo do Previsto</li>
+                    <li><span class="cor-legenda" style="background-color: red;"></span> Acima do Previsto</li>
+                    <li><span class="cor-legenda" style="background-color: blue;"></span> Dentro do Previsto</li>
+                    <li><span class="cor-legenda" style="background-color: gray;"></span> Padrao / Sem dados</li>
+                </ul>
+                <button id="legenda-fechar" @click="legendaAberta = false">Fechar</button>
+            </div>
+        </div>
+    `,
+    setup() {
+        const anosDisponiveis = ref([]);
+        const anoSelecionado = ref(null);
+        const legendaAberta = ref(false);
+        const dadosPorAno = ref({});
+
+        let viewer = null;
+        let entidadesDoMapa = [];
+
+        const API_BASE = window.location.origin;
+
+        const coresPorClassificacao = {
+            'Abaixo do Previsto': Cesium.Color.GREEN.withAlpha(0.9),
+            'Acima do Previsto': Cesium.Color.RED.withAlpha(0.7),
+            'Dentro do Previsto': Cesium.Color.BLUE.withAlpha(0.7),
+            'PADRAO': Cesium.Color.GRAY.withAlpha(0.2)
+        };
+
+        function normalizarString(texto) {
+            if (!texto) return "";
+            return String(texto).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        }
+
+        function atualizarMapa() {
+            const ano = anoSelecionado.value;
+            if (!ano || !dadosPorAno.value[ano]) return;
+
+            const mapaClassificacao = new Map();
+            for (const item of dadosPorAno.value[ano]) {
+                const munNorm = normalizarString(item.municipio);
+                if (munNorm) mapaClassificacao.set(munNorm, item.classificacao);
+            }
+
+            for (const entity of entidadesDoMapa) {
+                const nmMunProperty = entity.properties ? entity.properties['NM_MUN'] : null;
+                if (nmMunProperty && entity.polygon) {
+                    const nmMun = normalizarString(nmMunProperty.getValue());
+                    const classificacao = mapaClassificacao.get(nmMun);
+                    entity.polygon.material = coresPorClassificacao[classificacao] || coresPorClassificacao['PADRAO'];
+                    entity.polygon.outline = true;
+                    entity.polygon.outlineColor = Cesium.Color.GHOSTWHITE.withAlpha(0.9);
+                }
+            }
+        }
+
+        onMounted(async () => {
+            // Busca config (token Cesium) da API
+            let cesiumToken = '';
+            try {
+                const cfgResp = await fetch(`${API_BASE}/api/v1/config`);
+                const cfg = await cfgResp.json();
+                cesiumToken = cfg.cesium_token;
+            } catch (err) {
+                console.warn('Nao foi possivel carregar config da API:', err);
+            }
+
+            // Carrega dados da API
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/mapa/dados-classificacao`);
+                dadosPorAno.value = await resp.json();
+                anosDisponiveis.value = Object.keys(dadosPorAno.value).sort((a, b) => b - a);
+                if (anosDisponiveis.value.length > 0) {
+                    anoSelecionado.value = anosDisponiveis.value[0];
+                }
+            } catch (err) {
+                console.error('Erro ao carregar dados de classificacao:', err);
+            }
+
+            // Inicializa Cesium
+            Cesium.Ion.defaultAccessToken = cesiumToken;
+            const terrainProvider = await Cesium.createWorldTerrainAsync();
+
+            viewer = new Cesium.Viewer('cesiumContainer', {
+                terrainProvider,
+                infoBox: false,
+                selectionIndicator: false
+            });
+            // Forca o resize apos o primeiro frame renderizado
+            requestAnimationFrame(() => {
+                viewer.resize();
+                viewer.scene.requestRender();
+                // Forca novamente apos 500ms para garantir layout estavel
+                setTimeout(() => {
+                    viewer.resize();
+                    viewer.scene.requestRender();
+                }, 500);
+            });
+
+            const geojsonUrl = `${API_BASE}/static/mapa/geojson/tfg_oficial.geojson`;
+            try {
+                const dataSource = await Cesium.GeoJsonDataSource.load(geojsonUrl);
+                viewer.dataSources.add(dataSource);
+                viewer.zoomTo(dataSource);
+                entidadesDoMapa = dataSource.entities.values;
+
+                if (anoSelecionado.value) atualizarMapa();
+
+                // Click handler para navegar para detalhes
+                const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+                handler.setInputAction(function (movement) {
+                    const feature = viewer.scene.pick(movement.position);
+                    if (Cesium.defined(feature) && feature.id) {
+                        const entity = feature.id;
+                        if (entity.properties && entity.properties.hasProperty('NM_MUN')) {
+                            const nomeBruto = entity.properties['NM_MUN'].getValue();
+                            const slug = normalizarString(nomeBruto).replace(/\s+/g, '-');
+                            window.location.href = `/municipio/${slug}`;
+                        }
+                    }
+                }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+                // Hover cursor
+                const hoverHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+                hoverHandler.setInputAction(function (movement) {
+                    const feature = viewer.scene.pick(movement.endPosition);
+                    document.body.style.cursor = Cesium.defined(feature) ? 'pointer' : 'default';
+                }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+            } catch (err) {
+                console.error('Falha ao carregar GeoJSON:', err);
+            }
+        });
+
+        onUnmounted(() => {
+            if (viewer) viewer.destroy();
+        });
+
+        return { anosDisponiveis, anoSelecionado, legendaAberta, atualizarMapa };
+    }
+};
+
+// --- Pagina de Detalhes do Municipio ---
+const DetalhesPage = {
+    template: `
+        <div class="detalhes-page">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="sidebar border border-right col-md-3 col-lg-2 p-0 bg-body-tertiary">
+                    </div>
+                    <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                            <h1 class="h2" v-if="municipio">Dashboard: {{ municipio.nome }} - {{ municipio.uf }}</h1>
+                            <div class="btn-toolbar mb-2 mb-md-0">
+                                <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="$router.push('/')">
+                                    &larr; Voltar ao Mapa
+                                </button>
+                            </div>
+                        </div>
+
+                        <canvas class="my-4 w-100" id="myChart" width="1272" height="400"
+                            style="display: block; box-sizing: border-box; height: 400px; width: 100%;"></canvas>
+
+                        <h2>Dados Detalhados</h2>
+                        <div class="table-responsive small">
+                            <table class="table table-striped table-sm">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Ano</th>
+                                        <th scope="col">Vitimas Reais</th>
+                                        <th scope="col">Previsao</th>
+                                        <th scope="col">Classificacao</th>
+                                        <th scope="col">Margem Erro</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="item in tabela" :key="item.ano">
+                                        <td>{{ item.ano }}</td>
+                                        <td>{{ item.total_vitimas_ano != null ? item.total_vitimas_ano : '-' }}</td>
+                                        <td>{{ item.previsao_homicidios ? item.previsao_homicidios.toFixed(1) : '-' }}</td>
+                                        <td>{{ item.classificacao }}</td>
+                                        <td>{{ item.margem_erro_k ? item.margem_erro_k.toFixed(2) : '-' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </main>
+                </div>
+            </div>
+        </div>
+    `,
+    setup() {
+        const route = VueRouter.useRoute();
+        const municipio = ref(null);
+        const tabela = ref([]);
+        let chartInstance = null;
+
+        const API_BASE = window.location.origin;
+
+        onMounted(async () => {
+            document.body.style.overflow = 'auto';
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/municipios/${route.params.slug}`);
+                if (!resp.ok) throw new Error('Municipio nao encontrado');
+                const data = await resp.json();
+                municipio.value = data.municipio;
+                tabela.value = data.tabela;
+
+                await nextTick();
+                const ctx = document.getElementById('myChart');
+                if (ctx) {
+                    chartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.grafico.labels_anos,
+                            datasets: [
+                                {
+                                    label: 'Dados Reais (SINESP/DATASUS)',
+                                    data: data.grafico.data_reais,
+                                    lineTension: 0,
+                                    backgroundColor: 'transparent',
+                                    borderColor: '#007bff',
+                                    borderWidth: 2,
+                                    pointBackgroundColor: '#007bff',
+                                    pointRadius: 4
+                                },
+                                {
+                                    label: 'Previsao do Modelo',
+                                    data: data.grafico.data_previsoes,
+                                    lineTension: 0,
+                                    backgroundColor: 'transparent',
+                                    borderColor: '#dc3545',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    pointBackgroundColor: '#dc3545'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top', labels: { usePointStyle: true } },
+                                tooltip: { mode: 'index', intersect: false }
+                            },
+                            scales: {
+                                y: { beginAtZero: true, title: { display: true, text: 'Numero de Homicidios' } },
+                                x: { title: { display: true, text: 'Ano' } }
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Erro ao carregar dados do municipio:', err);
+            }
+        });
+
+        onUnmounted(() => {
+            document.body.style.overflow = '';
+            if (chartInstance) chartInstance.destroy();
+        });
+
+        return { municipio, tabela };
+    }
+};
+
+// --- Router ---
+const routes = [
+    { path: '/', component: MapaPage },
+    { path: '/municipio/:slug', component: DetalhesPage }
+];
+
+const router = createRouter({
+    history: createWebHistory(),
+    routes
+});
+
+// --- App ---
+const app = createApp({});
+app.use(router);
+app.mount('#app');
+</script>
+</body>
+</html>

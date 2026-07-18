@@ -1,73 +1,31 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+*.pyc
+*.pyo
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual environments
+dist/
 venv/
-env/
-ENV/
 
-# Environment variables
+# Environment
 .env
-.env.local
+*.env.local
 
-# Database
-*.sqlite3
-*.sqlite3-journal
-db.sqlite3
+# Node
+node_modules/
+dist-ssr/
 
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Django static
+staticfiles/
 
-# IDEs and editors
+# Docker volumes
+postgres_data/
+
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-*~
 
-# Data files (to avoid committing large datasets)
-*.csv
-*.txt
-*.xlsx
-
-# Specific directories with data
-/api/scripts/*.csv
-/api/scripts/*.txt
-/api/scripts/*.xlsx
-/app/db.sqlite3
-
-# Pytest / coverage
-.pytest_cache/
-.coverage
-htmlcov/
+# OS
+.DS_Store
+Thumbs.db

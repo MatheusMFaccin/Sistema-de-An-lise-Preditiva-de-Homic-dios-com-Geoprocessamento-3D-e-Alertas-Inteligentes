@@ -1,0 +1,59 @@
+services:
+  vue-app:
+    build: ./app
+    container_name: vue_app
+    ports:
+      - "8081:80"
+    depends_on:
+      fastapi-app:
+        condition: service_healthy
+    networks:
+      - default
+      - gataway
+    restart: unless-stopped
+
+  fastapi-app:
+    build: ./api
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/code/api
+    env_file:
+      - ./api/.env
+    depends_on:
+      db:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/config')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - default
+      - gataway
+
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    env_file:
+      - ./api/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+      - gataway
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    driver: bridge
+  gataway:
+    external: true
+    name: gataway

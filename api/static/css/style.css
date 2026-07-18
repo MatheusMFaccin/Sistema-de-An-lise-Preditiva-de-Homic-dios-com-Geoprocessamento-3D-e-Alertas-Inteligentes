@@ -1,0 +1,27 @@
+/* Estilos base do Sistema de Previsao de Homicidios */
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Espacamento para o conteudo principal */
+main.container {
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+}
+
+/* Cards */
+.card {
+    margin-bottom: 1rem;
+}
+
+/* Tabelas */
+.table th {
+    background-color: #f8f9fa;
+}
+
+/* Responsividade para o mapa Cesium */
+#cesiumContainer {
+    width: 100%;
+    height: calc(100vh - 60px);
+}

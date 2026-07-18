@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     POSTGRES_DB: str
     DATABASE_URL: str
 
-    DATABASE_URL: str
+    CESIUM_TOKEN: str = ""
 
     class Config:
         env_file = ".env"  # Indica onde buscar as variáveis

@@ -112,8 +112,10 @@ class Correlacao:
         df_res['fator_penalidade_fr'] = f_r
         df_res['n_anos_dados'] = n
         
-        # Filtra anos de interesse e limpa tipos
-        df_res = df_res[df_res['ano_previsao'].isin([2022, 2023, 2024, 2025])].copy()
+        # Mantém todos os anos do grupo + o ano futuro
+        anos_originais = group['ano'].unique()
+        anos_para_manter = sorted(set(anos_originais) | {ano_max + 1})
+        df_res = df_res[df_res['ano_previsao'].isin(anos_para_manter)].copy()
         
         cols_int = ['previsao_homicidios', 'previsao_min', 'previsao_max']
         for col in cols_int:

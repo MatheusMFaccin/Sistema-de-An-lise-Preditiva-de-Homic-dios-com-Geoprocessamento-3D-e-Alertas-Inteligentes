@@ -5,6 +5,7 @@ import pandas as pd
 from sqlalchemy.dialects.postgresql import insert
 import unicodedata
 from datetime import date
+import os
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -287,48 +288,70 @@ class Conn:
 
 
 if __name__ == "__main__":
-    # 1. Defina as listas corretamente (sem o [i])
-    eventos_arquivos = [
-        "eventos2024.csv", "eventos2023.csv", "eventos2022.csv",
-        "eventos2021.csv", "eventos2020.csv", "eventos2019.csv"
-    ]
-    datasus_arquivos = [
-        'datasus2024.txt', 'datasus2023.txt', 'datasus2022.txt',
-        'datasus2021.txt', 'datasus2020.txt', 'datasus2019.txt'
-    ]
-    anos = ["2024", "2023", "2022", "2021", "2020", "2019"]
-    
-    conn = Conn() # Instancie a conexão uma vez fora do loop
+    conn = Conn()
+    SessionLocal = SessionLocal # Garante que a sessão está disponível
 
-    # 2. Loop apenas para inserção de dados
-    for i in range(len(eventos_arquivos)):
-        print(f"--- Processando ano {anos[i]} ---")
+    # --- ETAPA 1: CARGA DE DADOS BRUTOS + PREDIÇÃO POR ANO (2019-2024) ---
+    anos_para_processar = range(2019, 2025) # De 2019 até 2024
+
+    print(">>> INICIANDO CARGA DE DADOS BRUTOS + PREDIÇÃO (2019-2024) <<<")
+    
+    anos_processados = 0
+
+    for ano in anos_para_processar:
+        print(f"\n=== Processando Ano: {ano} ===")
         
-        # Sincroniza municípios e insere dados brutos
-        conn.sync_municipios(SessionLocal, datasus_arquivos[i], eventos_arquivos[i])
-        conn.insert_evento(SessionLocal, eventos_arquivos[i])
-        conn.insert_datasus(SessionLocal, datasus_arquivos[i], anos[i])
+        # Define os nomes dos arquivos dinamicamente
+        # Procura dentro de scripts/ primeiro, depois no diretório atual
+        script_dir = Path(__file__).parent.resolve()
+        evento_caminho = str(script_dir / f"eventos{ano}.csv")
+        datasus_caminho = str(script_dir / f"datasus{ano}.txt")
+        
+        if not os.path.exists(evento_caminho) or not os.path.exists(datasus_caminho):
+            print(f"ALERTA: Arquivos para {ano} não encontrados. Pulando...")
+            continue
 
-    # 3. Cálculos de correlação (FORA do loop de inserção)
-    # Isso evita que o código fique lento e recalcule o que já foi feito
-    print("--- Calculando Correlações e Previsões ---")
-    
-    datasus_df = Correlacao.prepara_correlacao_datasus()
-    eventos_df = Correlacao.prepara_correlacao_eventos()
+        # --- CARGA DO ANO ---
+        conn.sync_municipios(SessionLocal, datasus_caminho, evento_caminho)
+        conn.insert_evento(SessionLocal, evento_caminho)
+        conn.insert_datasus(SessionLocal, datasus_caminho, str(ano))
 
-    c = Correlacao()
-    correlacao_df = c.calcular_previsao_temporal_por_municipio(datasus_df, eventos_df)
+        anos_processados += 1
 
-    # Salvar logs
-    correlacao_df.to_csv("correlacao_debug.csv", sep=";", index=False)
-    conn.insert_correlacao(SessionLocal, correlacao_df)
+        # --- PREDIÇÃO E CORRELAÇÃO (com todos os dados acumulados até aqui) ---
+        print(f"\n--- Rodando predição/correlação com dados até {ano}... ---")
 
-    # Dados reais e comparativos
-    df_reais = c.calcula_dados_reais()
-    df_reais.to_csv("reais.csv", sep=";", index=False)
-    conn.insert_dados_reais(SessionLocal, df_reais)
+        try:
+            datasus_df = Correlacao.prepara_correlacao_datasus()
+            eventos_df = Correlacao.prepara_correlacao_eventos()
 
-    df_comp = c.comparar_previsoes_com_reais()
-    conn.insert_comparativo(SessionLocal, df_comp)
-    
-    print("--- Processo finalizado com sucesso! ---")
+            c = Correlacao()
+
+            # Calcula Regressão Linear e Margens de Erro
+            correlacao_df = c.calcular_previsao_temporal_por_municipio(datasus_df, eventos_df)
+
+            if not correlacao_df.empty:
+                # Salva log por ano (opcional)
+                correlacao_df.to_csv(f"correlacao_ate_{ano}.csv", sep=";", index=False)
+
+                # Insere as previsões no banco
+                conn.insert_correlacao(SessionLocal, correlacao_df)
+
+                # Calcula e Salva os Dados Reais Agregados
+                df_reais = c.calcula_dados_reais()
+                conn.insert_dados_reais(SessionLocal, df_reais)
+
+                # Compara Real vs Previsto
+                df_comp = c.comparar_previsoes_com_reais()
+                conn.insert_comparativo(SessionLocal, df_comp)
+
+                print(f"--- Predição/correlação concluída para dados até {ano} ---")
+            else:
+                print(f"--- Dados insuficientes para predição até {ano} (mínimo 3 anos por município) ---")
+
+        except Exception as e:
+            print(f"ERRO na predição/correlação após {ano}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    print(f"\n>>> PROCESSO FINALIZADO — {anos_processados} anos processados <<<")
